@@ -1,125 +1,168 @@
-const ENDPOINT = 'https://tiktok-tts.weilnet.workers.dev'
+const ENDPOINT = 'https://tiktok-tts.weilnet.workers.dev';
 
-const TEXT_BYTE_LIMIT = 300
-const textEncoder = new TextEncoder()
+const TEXT_BYTE_LIMIT = 300;
+const textEncoder = new TextEncoder();
 
-window.onload = () => {
-    document.getElementById('charcount').textContent = `0/${TEXT_BYTE_LIMIT}`
-    const req = new XMLHttpRequest()
-    req.open('GET', `${ENDPOINT}/api/status`, false)
-    req.send()
+window.onload = async () => {
+    document.getElementById('charcount').textContent = `0/${TEXT_BYTE_LIMIT}`;
+    try {
+        const response = await fetch(`${ENDPOINT}/api/status`);
+        const data = await response.json();
 
-    let resp = JSON.parse(req.responseText)
-    if (resp.data) {
-        if (resp.data.available) {
-            console.info(`${resp.data.meta.dc} (age ${resp.data.meta.age} minutes) is able to provide service`)
-            enableControls()
+        if (data?.data?.available) {
+            console.info(`${data.data.meta.dc} is ready to provide service`);
+            enableControls();
         } else {
-            console.error(`${resp.data.meta.dc} (age ${resp.data.meta.age} minutes) is unable to provide service`)
-            setError(
-                `Service not available${resp.data.message && resp.data.message.length > 1 ? ` (<b>"${resp.data.message}"</b>)` : ''}, try again later or check the <a href='https://github.com/Weilbyte/tiktok-tts'>GitHub</a> repository for more info`
-                )
+            setError("⚠ Dịch vụ không khả dụng. Vui lòng thử lại sau.");
         }
-    } else {
-        setError('Error querying API status, try again later or check the <a href=\'https://github.com/Weilbyte/tiktok-tts\'>GitHub</a> repository for more info')
-    }  
-}
+    } catch (error) {
+        setError("🚨 Không thể kết nối API.");
+        console.error(error);
+    }
+};
 
 const setError = (message) => {
-    clearAudio()
-    document.getElementById('error').style.display = 'block'
-    document.getElementById('errortext').innerHTML = message
-}
+    clearAudio();
+    const errorBox = document.getElementById('error');
+    errorBox.classList.add('show');
+    errorBox.style.display = 'block';
+    document.getElementById('errortext').innerHTML = message;
+    updateProgress("⛔ Đã xảy ra lỗi!");
+};
 
 const clearError = () => {
-    document.getElementById('error').style.display = 'none'
-    document.getElementById('errortext').innerHTML = 'There was an error.'
-}
+    const errorBox = document.getElementById('error');
+    errorBox.classList.remove('show');
+    errorBox.style.display = 'none';
+    document.getElementById('errortext').innerHTML = '';
+};
 
-const setAudio = (base64, text) => {
-    document.getElementById('success').style.display = 'block'
-    document.getElementById('audio').src = `data:audio/mpeg;base64,${base64}`
-    document.getElementById('generatedtext').innerHTML = `"${text}"`
-}
+const setAudio = (audioBlob, text) => {
+    const url = URL.createObjectURL(audioBlob);
+    document.getElementById('success').classList.add('show');
+    document.getElementById('success').style.display = 'block';
+    document.getElementById('audio').src = url;
+    document.getElementById('generatedtext').innerHTML = `"${text}"`;
+
+    // Cập nhật nút tải xuống
+    const downloadLink = document.getElementById('download');
+    downloadLink.href = url;
+    downloadLink.download = 'tts_audio.mp3';
+    downloadLink.classList.remove('hidden');
+
+    updateProgress("✅ Hoàn thành!");
+};
 
 const clearAudio = () => {
-    document.getElementById('success').style.display = 'none'
-    document.getElementById('audio').src = ``
-    document.getElementById('generatedtext').innerHTML = ''
-}
+    document.getElementById('success').classList.remove('show');
+    document.getElementById('success').style.display = 'none';
+    document.getElementById('audio').src = '';
+    document.getElementById('generatedtext').innerHTML = '';
+    document.getElementById('download').classList.add('hidden');
+};
 
 const disableControls = () => {
-    document.getElementById('text').setAttribute('disabled', '')
-    document.getElementById('voice').setAttribute('disabled', '')
-    document.getElementById('submit').setAttribute('disabled', '')
-}
+    document.getElementById('text').setAttribute('disabled', '');
+    document.getElementById('voice').setAttribute('disabled', '');
+    document.getElementById('submit').setAttribute('disabled', '');
+};
 
 const enableControls = () => {
-    document.getElementById('text').removeAttribute('disabled')
-    document.getElementById('voice').removeAttribute('disabled')
-    document.getElementById('submit').removeAttribute('disabled')
-}
+    document.getElementById('text').removeAttribute('disabled');
+    document.getElementById('voice').removeAttribute('disabled');
+    document.getElementById('submit').removeAttribute('disabled');
+};
+
+const updateProgress = (message) => {
+    const progressBox = document.getElementById('progress');
+    progressBox.style.display = 'block';
+    document.getElementById('progress-text').innerHTML = message;
+};
+
+const hideProgress = () => {
+    document.getElementById('progress').style.display = 'none';
+};
 
 const onTextareaInput = () => {
-    const text = document.getElementById('text').value
-    const textEncoded = textEncoder.encode(text)
-
-    document.getElementById('charcount').textContent = `${textEncoded.length <= 999 ? textEncoded.length : 999}/${TEXT_BYTE_LIMIT}`
+    const text = document.getElementById('text').value;
+    const textEncoded = textEncoder.encode(text);
+    document.getElementById('charcount').textContent = `${textEncoded.length}/${TEXT_BYTE_LIMIT}`;
 
     if (textEncoded.length > TEXT_BYTE_LIMIT) {
-        document.getElementById('charcount').style.color = 'red'
+        document.getElementById('charcount').style.color = 'red';
     } else {
-        document.getElementById('charcount').style.color = 'black'
+        document.getElementById('charcount').style.color = 'black';
     }
-}
+};
 
-const submitForm = () => {
-    clearError()
-    clearAudio()
+const submitForm = async () => {
+    clearError();
+    clearAudio();
+    disableControls();
+    hideProgress();
 
-    disableControls()
+    const text = document.getElementById('text').value.trim();
+    const voice = document.getElementById('voice').value;
 
-    let text = document.getElementById('text').value
-    const textLength = new TextEncoder().encode(text).length
-    console.log(textLength)
-
-    if (textLength === 0) text = 'The fungus among us.' 
-    const voice = document.getElementById('voice').value
-
-    if(voice == "none") {
-        setError("No voice has been selected");
-        enableControls()
-        return
+    if (!text) {
+        setError("⚠ Vui lòng nhập văn bản.");
+        enableControls();
+        return;
     }
 
-    if (textLength > TEXT_BYTE_LIMIT) {
-        setError(`Text must not be over ${TEXT_BYTE_LIMIT} UTF-8 characters (currently at ${textLength})`)
-        enableControls()
-        return
+    if (voice === "none") {
+        setError("⚠ Vui lòng chọn giọng nói.");
+        enableControls();
+        return;
     }
+
+    const lines = text.split("\n").filter(line => line.trim() !== "");
+
+    updateProgress(`🔄 Đang xử lý ${lines.length} dòng văn bản...`);
 
     try {
-        const req = new XMLHttpRequest()
-        req.open('POST', `${ENDPOINT}/api/generation`, false)
-        req.setRequestHeader('Content-Type', 'application/json')
-        req.send(JSON.stringify({
-            text: text,
-            voice: voice
-        }))
+        const audioBlobs = [];
 
-        let resp = JSON.parse(req.responseText)
-        if (resp.data === null) {
-            setError(`<b>Generation failed</b><br/> ("${resp.error}")`)
-        } else {
-            setAudio(resp.data, text)
-        }  
-    } catch {
-        setError('Error submitting form (printed to F12 console)')
-        console.log('^ Please take a screenshot of this and create an issue on the GitHub repository if one does not already exist :)')
-        console.log('If the error code is 503, the service is currently unavailable. Please try again later.')
-        console.log(`Voice: ${voice}`)
-        console.log(`Text: ${text}`)
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            updateProgress(`🎙 Xử lý dòng ${i + 1}/${lines.length}: "${line}"...`);
+
+            const response = await fetch(`${ENDPOINT}/api/generation`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: line, voice: voice }),
+            });
+
+            const result = await response.json();
+            if (!result.data) {
+                setError(`🚨 Lỗi khi xử lý dòng: "${line}"`);
+                enableControls();
+                return;
+            }
+
+            const audioBlob = await base64ToBlob(result.data, "audio/mpeg");
+            audioBlobs.push(audioBlob);
+        }
+
+        updateProgress("🔄 Đang ghép các đoạn âm thanh...");
+
+        const mergedBlob = new Blob(audioBlobs, { type: "audio/mpeg" });
+        setAudio(mergedBlob, text);
+    } catch (error) {
+        setError("🚨 Lỗi không xác định khi tạo âm thanh.");
+        console.error(error);
     }
 
-    enableControls()
-}
+    enableControls();
+};
+
+// Chuyển Base64 thành Blob
+const base64ToBlob = async (base64, mimeType) => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+};
